@@ -1,0 +1,15 @@
+# Runtime artefacts this plugin can write next to its own source.
+load-trace.log
+
+# Node and package-manager leftovers if the package is ever worked on in place.
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# Editors and OS.
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

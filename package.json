@@ -1,0 +1,42 @@
+{
+  "name": "dsh-memory-bank",
+  "version": "0.1.0",
+  "description": "Persistent workspace memory for DeepSeek Harness: keeps a .memory-bank/ in the workspace so a new conversation inherits the tech stack, past decisions and the current task.",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "src",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "memory-bank",
+    "context",
+    "continuity",
+    "agent-memory"
+  ],
+  "license": "MIT",
+  "author": "Tokamak Sullivan <tokamakyuri@gmail.com>",
+  "engines": {
+    "node": ">=20"
+  },
+  "meta": {
+    "title": "Memory Bank",
+    "description": "Keeps .memory-bank/ current in the workspace so a new conversation remembers the stack, the decisions and the task in flight."
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

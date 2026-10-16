@@ -1,0 +1,9 @@
+# Memory Bank bundle patch.
+#
+# One insert over the profile root. The row id `memory-bank` addresses this plugin
+# from the user's own profile cordis.patch.yml, which is where config overrides
+# belong (a patch replaces the whole `config`, it does not merge into it).
+- insert:
+    - id: memory-bank
+      name: dsh-memory-bank
+      config: {}
