@@ -13,6 +13,7 @@
     "src",
     "cordis.patch.yml",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "keywords": [
@@ -27,6 +28,14 @@
   ],
   "license": "MIT",
   "author": "Tokamak Sullivan <tokamakyuri@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TokamakYuri/dsh-memory-bank.git"
+  },
+  "homepage": "https://github.com/TokamakYuri/dsh-memory-bank#readme",
+  "bugs": {
+    "url": "https://github.com/TokamakYuri/dsh-memory-bank/issues"
+  },
   "engines": {
     "node": ">=20"
   },
