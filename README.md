@@ -22,7 +22,7 @@ Installed as a bundle, it contributes three things:
 
 | Contribution | Effect |
 | --- | --- |
-| A `systemPrompt.context` entry | Injects the bank digest into every session, resolved from the calling agent's `session.header.cwd`. A different workspace gets a different bank. |
+| A `systemPrompt.section` entry | Appends the bank digest to the system prompt of every session, resolved from the calling agent's `session.header.cwd`. A different workspace gets a different bank. |
 | The `memory_bank` tool | `status`, `list`, `read`, `grep`, `write`, `append`, `init`, `sync`. All writes go through the composed `fs` service under an explicit workspace-write sandbox policy. |
 | The `memory_plan` tool | Returns the update ritual: the checklist for turning a finished conversation into durable memory. |
 
@@ -125,13 +125,22 @@ The plugin imports nothing from `@deepseek-ai/*`. Two reasons:
 ## Development
 
 ```sh
-node dev/harness.mjs                        # 17 behavioural checks over an in-memory fs
+node dev/harness.mjs                        # 18 behavioural checks over an in-memory fs
 node dev/check-schemas.mjs                  # schema conformance, dependency-free
 node dev/check-schemas-against-harness.mjs  # the same schemas, real validator from app.asar
+node dev/check-prompt-safety.mjs            # the {{variable}} boundary, real renderers
 node dev/validate-profile-yaml.cjs <path-to-profile/cordis.patch.yml>
-node dev/apply-fixes.mjs --check            # re-runnable source codemod, reports drift
+node dev/apply-metadata.mjs --check         # publication fields, reports drift
 node dev/asar.mjs cat <path-inside-asar>    # read the packaged runtime
 ```
+
+`check-prompt-safety.mjs` covers the failure mode fixed in 0.1.1: the harness
+interpolates every runtime **context** with no opt-out, so project prose
+containing an ordinary `{{title}}` placeholder aborted prompt assembly. The bank
+is therefore contributed as a **section** with `interpolate: false`, and the
+script asserts both directions against the shipped renderers — the context form
+still throws the original error, while the section form passes the text through
+verbatim.
 
 `check-schemas-against-harness.mjs` reads `assertSupportedJsonSchema` straight out
 of the packaged `app.asar`, because that is the authority. This matters more than
@@ -157,7 +166,14 @@ which on a `node_modules` install belongs to the package manager.
 
 - **The bank is read, not requested.** Injection happens through the prompt
   registry, so a session cannot forget to look.
-- **The prompt path is synchronous.** `systemPrompt.context` cannot await I/O, so
+- **The contribution is a section with `interpolate: false`, not a runtime
+  context.** This is load-bearing: `renderContextSections` interpolates every
+  context and throws on an unknown `{{name}}`, so a bank documenting, say, an
+  Obsidian `{{title}}` placeholder would break prompt assembly for that whole
+  workspace. Only sections can opt out, and project prose must never be rewritten
+  by the harness. `dev/check-prompt-safety.mjs` asserts both halves against the
+  shipped renderers.
+- **The prompt path is synchronous.** `systemPrompt.section` cannot await I/O, so
   the bank is read on the async `agent/pre-step` path into a per-workspace cache
   and only rendered on the prompt path. A slow filesystem delays the step; it never
   blocks the event loop.

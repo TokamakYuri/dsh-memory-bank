@@ -100,10 +100,15 @@ function makeHarness(rawConfig = {}) {
 
   const listeners = [];
   const injected = [];
+  const sections = [];
   const warnings = [];
   const systemPrompt = {
     context(entry) {
       injected.push(entry);
+      return () => {};
+    },
+    section(entry) {
+      sections.push(entry);
       return () => {};
     },
   };
@@ -139,6 +144,7 @@ function makeHarness(rawConfig = {}) {
     files,
     tools,
     injected,
+    sections,
     warnings,
     config: config.value,
     agent: (cwd, id) => ({ id, session: { header: { cwd } }, ctx: {} }),
@@ -296,9 +302,14 @@ console.log('9. each workspace gets its own bank, confined by the sandbox policy
 console.log('10. the prompt carries the injected files and nothing else');
 {
   await h.preStep(agent);
-  assert.equal(h.injected.length, 1);
-  const entry = h.injected[0];
-  assert.equal(entry.name, 'memory-bank:context');
+  // A section, never a context: contexts are always `{{variable}}`-interpolated
+  // and the bank is arbitrary project prose. See check 11a.
+  assert.equal(h.injected.length, 0, 'registers no runtime context');
+  assert.equal(h.sections.length, 1, 'registers exactly one section');
+  const entry = h.sections[0];
+  assert.equal(entry.name, 'memory-bank:project-memory');
+  assert.equal(entry.interpolate, false, 'disables prompt interpolation for the bank');
+  assert.equal(typeof entry.order, 'number');
   assert.equal(typeof entry.text, 'function');
   const text = entry.text({ agent, scope: agent });
   assert.match(text, /## Memory Bank \(persistent project memory\)/);
@@ -310,11 +321,32 @@ console.log('10. the prompt carries the injected files and nothing else');
   assert.ok(text.length < 24_000, `respects injectBudget (was ${text.length})`);
 }
 
+console.log('11a. bank prose containing {{placeholders}} renders literally');
+{
+  // Regression: a bank that documents Obsidian template syntax (a real project
+  // does) used to break prompt assembly, because `renderContextSections`
+  // interpolates every context and throws on an unknown variable.
+  const hh = makeHarness();
+  const a = hh.agent(WORKSPACE, 'session-hostile');
+  await hh.preStep(a);
+  await hh.tools.get('memory_bank').execute({
+    action: 'write',
+    file: 'techcontext.md',
+    content: '# Tech Context\n\n**Last updated**: today\n\n## Templates\n\n'
+      + 'Obsidian core Templates uses `{{title}}` and `{{date}}` placeholders.\n',
+  }, hh.exec(a));
+  await hh.preStep(a);
+  const text = hh.sections[0].text({ agent: a });
+  assert.match(text, /\{\{title\}\}/, '{{title}} survives verbatim');
+  assert.match(text, /\{\{date\}\}/, '{{date}} survives verbatim');
+  assert.equal(hh.sections[0].interpolate, false, 'which is only safe because interpolation is off');
+}
+
 console.log('11. an untouched workspace gets the bootstrap line, not an empty section');
 {
   const cold = makeHarness({ autoInitialize: false, inject: ['projectbrief.md'] });
   const coldAgent = cold.agent('C:/projects/cold', 'session-cold');
-  const text = cold.injected[0].text({ agent: coldAgent });
+  const text = cold.sections[0].text({ agent: coldAgent });
   assert.match(text, /memory_bank/);
   assert.match(text, /status/);
   assert.doesNotMatch(text, /### /, 'no file bodies before the first read');

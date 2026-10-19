@@ -9,6 +9,21 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 Nothing yet.
 
+## [0.1.1] - 2026-10-20
+
+### Fixed
+
+- **A bank containing `{{...}}` no longer breaks prompt assembly.** The digest was
+  injected as a `systemPrompt.context`, and the harness interpolates every runtime
+  context with no opt-out, throwing `unknown prompt variable "{{title}}"` on any
+  unknown reference. A bank that documented something as ordinary as an Obsidian
+  template placeholder therefore failed the whole turn for that workspace. The
+  contribution is now a section registered with `interpolate: false`, which the
+  harness honours, so bank prose reaches the model verbatim.
+- `dev/check-prompt-safety.mjs` reproduces the original failure against the shipped
+  renderers and asserts the section form survives it, so the behaviour is pinned
+  rather than assumed.
+
 ## [0.1.0] - 2026-10-14
 
 First release.
@@ -66,5 +81,6 @@ These were found by review before the first release and never shipped:
 - Load tracing was on by default and wrote into the package directory.
 - `grep` returned its match count in a field named `bytes`.
 
-[Unreleased]: https://github.com/TokamakYuri/dsh-memory-bank/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/TokamakYuri/dsh-memory-bank/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/TokamakYuri/dsh-memory-bank/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/TokamakYuri/dsh-memory-bank/releases/tag/v0.1.0

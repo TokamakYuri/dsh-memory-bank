@@ -11,10 +11,13 @@
  * `.memory-bank/`, and reads it back into every session's system prompt. Three
  * mechanisms do the work:
  *
- * 1. `systemPrompt.context(...)` injects the bank digest as dynamic runtime
- *    context, resolved from the calling agent's `session.header.cwd`. A different
- *    workspace gets a different bank; the same workspace gets the same bank on
- *    every turn and in every session.
+ * 1. `systemPrompt.section(..., interpolate: false)` appends the bank digest to
+ *    the system prompt, resolved from the calling agent's `session.header.cwd`.
+ *    A different workspace gets a different bank; the same workspace gets the
+ *    same bank in every session. `interpolate: false` is mandatory here because
+ *    the bank is arbitrary project prose: a runtime *context* is always
+ *    `{{variable}}`-interpolated, so ordinary text such as an Obsidian
+ *    `{{title}}` placeholder would otherwise throw during assembly.
  * 2. The `memory_bank` tool maintains it, writing through the composed `fs`
  *    service under an explicit workspace-write sandbox policy, so the bank can
  *    never escape the workspace.
@@ -79,8 +82,15 @@ trace(`module evaluated pid=${process.pid}`);
  */
 export const inject = ['fs', 'tools', 'systemPrompt'];
 
-/** Position of the prompt contribution among the assembled runtime contexts. */
-const CONTEXT_ORDER = 1000;
+/**
+ * Position of the prompt contribution among the assembled system-prompt sections.
+ *
+ * 950 places the bank after the deployment persona and file-reference guidance
+ * but before the per-tool sections, which is where durable project context
+ * belongs: foundational, and ahead of mechanics. Any finite number is legal for
+ * a plugin-owned section; the harness's own named slots are not extensible.
+ */
+const SECTION_ORDER = 950;
 
 /** Character ceiling on one `content` argument, guarding against a runaway write. */
 const MAX_CONTENT_CHARS = 4_000_000;
@@ -325,9 +335,18 @@ export function apply(ctx, config) {
   // `text` is synchronous, so the bank is read into a cache from the async
   // `agent/pre-step` path below and only rendered here. That ordering also means
   // a slow or remote filesystem delays the step rather than blocking the loop.
-  ctx.effect(() => ctx.systemPrompt.context({
-    name: 'memory-bank:context',
-    order: CONTEXT_ORDER,
+  //
+  // This is a SECTION with `interpolate: false`, not a runtime context. The
+  // distinction is load-bearing: `renderContextSections` interpolates every
+  // context with no opt-out, so a bank that documents something as ordinary as
+  // an Obsidian `{{title}}` placeholder makes prompt assembly throw
+  // ("unknown prompt variable") and breaks the whole turn. Only sections accept
+  // `interpolate: false`, and project memory is prose the harness must never
+  // rewrite.
+  ctx.effect(() => ctx.systemPrompt.section({
+    name: 'memory-bank:project-memory',
+    order: SECTION_ORDER,
+    interpolate: false,
     text: (assembly) => {
       const agent = assembly?.agent ?? assembly?.scope;
       const workspace = workspaceOf(agent);
