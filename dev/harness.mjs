@@ -280,7 +280,20 @@ console.log('8. bad input is refused with text the model can act on');
   await assert.rejects(() => call({ action: 'write', file: 'techcontext.md' }), /requires a string `content`/);
   await assert.rejects(() => call({ action: 'write', file: 'progress.md', content: '   ' }), /non-empty `content`/);
   await assert.rejects(() => call({ action: 'grep', query: '   ' }), /non-empty `query`/);
-  await assert.rejects(() => call({ action: 'read', file: 'projectbrief.md', workspace: SECOND }), /does not exist yet/);
+  // The message names the resolved bank directory, so a wrong `workspace` guess
+  // reads as a path mismatch rather than as a file that was never created.
+  await assert.rejects(
+    () => call({ action: 'read', file: 'projectbrief.md', workspace: SECOND }),
+    (error) => {
+      assert.match(error.message, /does not exist in /);
+      assert.ok(error.message.includes(SECOND.replace(/\//g, '\\')), 'the message names the resolved bank root');
+      return true;
+    },
+  );
+  // A relative `workspace` is refused outright: it would resolve against the Host
+  // process directory, not the project.
+  await assert.rejects(() => call({ action: 'status', workspace: '.memory-bank' }), /must be an absolute path/);
+  await assert.rejects(() => call({ action: 'status', workspace: '.' }), /must be an absolute path/);
 }
 
 console.log('9. each workspace gets its own bank, confined by the sandbox policy');
@@ -420,11 +433,18 @@ console.log('16. gitignore=false seeds the bank but leaves .gitignore alone');
   assert.equal(quiet.files.has(`${normalize(WORKSPACE)}/.gitignore`), false, '.gitignore untouched');
 }
 
-console.log('17. a hostile workspace argument cannot escape the sandbox');
+console.log('17. an out-of-workspace target is honored but still confined by the sandbox');
 {
-  const escaped = await call({ action: 'status', workspace: '../outside' });
-  assert.ok(normalize(escaped.root).includes('outside'), 'explicit workspace is honored');
-  // The fake fs asserts containment on every write, so any escape would throw.
+  // A relative traversal is refused before anything is resolved.
+  await assert.rejects(() => call({ action: 'status', workspace: '../outside' }), /must be an absolute path/);
+
+  // An explicit absolute path is honored, and the fake fs asserts containment on
+  // every write, so an escape would throw rather than silently succeed.
+  const outside = 'C:/projects/outside-target';
+  const status = await call({ action: 'status', workspace: outside });
+  assert.equal(normalize(status.workspace), normalize(outside));
+  assert.equal(normalize(status.root), `${normalize(outside)}/.memory-bank`);
+
   const written = await call({ action: 'write', file: 'progress.md', content: '# Progress\n\nok\n' });
   assert.equal(written.ok, true);
 }

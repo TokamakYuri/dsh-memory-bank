@@ -9,6 +9,26 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 Nothing yet.
 
+## [0.1.2] - 2026-10-22
+
+### Fixed
+
+- **The optional `workspace` argument no longer produces phantom "missing files"
+  in other projects.** It was used verbatim, so an agent pointing at "the memory
+  bank" — passing either the bank directory itself or a bare `.memory-bank` — made
+  the store look for `<that path>/.memory-bank/*.md`, find nothing, and report every
+  file as absent. A relative path was worse: it resolved against the Host process
+  directory, with the same silent result. Now:
+  - a path naming the bank directory is understood to mean its parent;
+  - a relative path is refused, with a message naming the session workspace;
+  - every result echoes the resolved `workspace`, and `status` / `list` name the
+    directory they searched when it holds nothing;
+  - a `read` of an absent file names the resolved bank root, so a path mismatch
+    reads as a path mismatch instead of as a file that was never created.
+- `dev/real-fs-smoke.mjs` runs the plugin against the real filesystem over a copy
+  of another workspace's bank, and `dev/check-workspace-argument.mjs` pins the
+  argument handling above. Both other workspaces on this machine pass all checks.
+
 ## [0.1.1] - 2026-10-20
 
 ### Fixed
@@ -81,6 +101,7 @@ These were found by review before the first release and never shipped:
 - Load tracing was on by default and wrote into the package directory.
 - `grep` returned its match count in a field named `bytes`.
 
-[Unreleased]: https://github.com/TokamakYuri/dsh-memory-bank/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/TokamakYuri/dsh-memory-bank/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/TokamakYuri/dsh-memory-bank/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/TokamakYuri/dsh-memory-bank/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/TokamakYuri/dsh-memory-bank/releases/tag/v0.1.0

@@ -125,14 +125,22 @@ The plugin imports nothing from `@deepseek-ai/*`. Two reasons:
 ## Development
 
 ```sh
-node dev/harness.mjs                        # 18 behavioural checks over an in-memory fs
-node dev/check-schemas.mjs                  # schema conformance, dependency-free
-node dev/check-schemas-against-harness.mjs  # the same schemas, real validator from app.asar
-node dev/check-prompt-safety.mjs            # the {{variable}} boundary, real renderers
+node dev/harness.mjs                          # 18 behavioural checks over an in-memory fs
+node dev/check-workspace-argument.mjs         # `workspace` handling, real filesystem
+node dev/real-fs-smoke.mjs [bank-dir]         # the plugin over a real fs, on a copied bank
+node dev/check-schemas.mjs                    # schema conformance, dependency-free
+node dev/check-schemas-against-harness.mjs    # the same schemas, real validator from app.asar
+node dev/check-prompt-safety.mjs              # the interpolation boundary, real renderers
 node dev/validate-profile-yaml.cjs <path-to-profile/cordis.patch.yml>
-node dev/apply-metadata.mjs --check         # publication fields, reports drift
-node dev/asar.mjs cat <path-inside-asar>    # read the packaged runtime
+node dev/apply-metadata.mjs --check           # publication fields, reports drift
+node dev/asar.mjs cat <path-inside-asar>      # read the packaged runtime
 ```
+
+`real-fs-smoke.mjs` and `check-workspace-argument.mjs` exist because the in-memory
+harness cannot see drive, path or casing behaviour, and because the reported
+symptom appeared only in *other* projects. Point the former at a bank directory to
+copy it into a temp workspace and exercise `status`, `read`, `init`, `write` and the
+prompt digest against real files.
 
 `check-prompt-safety.mjs` covers the failure mode fixed in 0.1.1: the harness
 interpolates every runtime **context** with no opt-out, so project prose
@@ -186,6 +194,36 @@ which on a `node_modules` install belongs to the package manager.
 - **`gitignore` is idempotent.** The check strips leading and trailing slashes and
   line endings before comparing, so `foo`, `foo/`, `/foo/` and a CRLF line all
   count as already present across plugin reloads.
+
+## Troubleshooting
+
+**The tool reports files as missing, but they are on disk.**
+
+Check the `workspace` field in the result and the `Looked in` line. The tool
+resolves `<workspace>/<folder>/*.md`, so a `workspace` that is one level off — an
+ancestor, a sibling, or the bank directory itself before 0.1.2 — yields an empty
+bank and a `read` that says the file does not exist.
+
+Omit `workspace` unless you genuinely mean another project; the session's own
+workspace is the default and is what the prompt digest uses. If you do pass it,
+pass the project directory, not `.memory-bank`, and prefer an absolute path: a
+relative one is refused because it would resolve against the Host process
+directory.
+
+**The prompt shows only the one-line bootstrap note, not the bank.**
+
+That is the cold-cache state. The digest is read on the async `agent/pre-step`
+path and can only be rendered on the next step; the bootstrap line is what appears
+before the first read. If it persists across steps, the read is failing and the
+host log carries a `memory-bank: could not read …` warning — usually a `folder`
+typo or a bank path that does not exist.
+
+**The tools are absent entirely.**
+
+A deselected bundle looks identical to an uninstalled one. Check the profile's
+`package.json`: if the dependency is listed but the name is missing from
+`dsh.profile.bundles`, the bundle is deselected — re-enable it with
+`plugin_manager` `set_bundle`.
 
 ## Known limitations
 

@@ -86,12 +86,13 @@ const MATCH_ROW_SCHEMA = Object.freeze({
 const RESULT_SCHEMA = Object.freeze({
   type: 'object',
   additionalProperties: false,
-  required: ['action', 'ok', 'folder', 'root'],
+  required: ['action', 'ok', 'folder', 'root', 'workspace'],
   properties: {
     action: { type: 'string', enum: [...ACTIONS] },
     ok: { type: 'boolean' },
     folder: { type: 'string' },
     root: { type: 'string' },
+    workspace: { type: 'string' },
     initialized: { type: 'boolean' },
     focus: { type: 'string' },
     file: { type: 'string' },
@@ -215,7 +216,10 @@ export function memoryBankTool() {
         },
         workspace: {
           type: 'string',
-          description: 'Absolute workspace directory to operate on. Omit to use the current session workspace, which is almost always what you want.',
+          description: [
+            'Absolute path of the PROJECT directory whose bank to operate on. Omit it to use this session\'s own workspace, which is almost always what you want.',
+            'Do not pass the bank directory: pass the project directory that contains it. A relative path is refused, because it would resolve against the Host process directory instead of your project.',
+          ].join(' '),
         },
       },
     },
@@ -224,6 +228,18 @@ export function memoryBankTool() {
       render: (_args, value) => {
         const lines = [];
         const where = `\`${value.folder}/\` (${value.root})`;
+        /**
+         * A bank directory holding nothing is the shape a wrong `workspace`
+         * guess takes, so say where it looked rather than only reporting zero.
+         * @returns {string[]} zero or more hint lines.
+         */
+        const emptyHint = () => (value.initialized === false && (value.files ?? []).length === 0
+          ? [
+            '',
+            `Looked in \`${value.root}\`.`,
+            `The project directory this resolved from is \`${value.workspace}\`. If that is not your project, omit \`workspace\` and the call uses the session's own workspace.`,
+          ]
+          : []);
         switch (value.action) {
           case 'status': {
             lines.push(
@@ -231,6 +247,7 @@ export function memoryBankTool() {
                 ? `Memory Bank at ${where} is initialized${value.focus ? ` — current focus: ${value.focus}` : ''}.`
                 : `Memory Bank at ${where} is NOT initialized. Call this tool with action "init" to create it.`,
             );
+            if ((value.files ?? []).length === 0) lines.push(...emptyHint());
             for (const file of value.files ?? []) {
               lines.push(`- ${file.name} (${file.bytes} B) — ${file.purpose}`);
             }
@@ -239,7 +256,10 @@ export function memoryBankTool() {
           case 'list': {
             lines.push(`Memory Bank at ${where}:`);
             for (const file of value.files ?? []) lines.push(`- ${file.name} (${file.bytes} B) — ${file.purpose}`);
-            if ((value.files ?? []).length === 0) lines.push('- (no files yet)');
+            if ((value.files ?? []).length === 0) {
+              lines.push('- (no files yet)');
+              lines.push(...emptyHint());
+            }
             break;
           }
           case 'read': {

@@ -27,7 +27,7 @@
  * @module dsh-memory-bank
  */
 
-import { dirname, join } from 'node:path';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 import { appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -412,6 +412,45 @@ export function apply(ctx, config) {
   };
 
   /**
+   * Resolve which workspace a call operates on.
+   *
+   * The optional `workspace` argument exists so a session can inspect another
+   * project, but used verbatim it is a trap: an agent that wants to point at "the
+   * memory bank" passes either the bank directory itself or a bare
+   * `.memory-bank`, and either way the store then looks for
+   * `<that path>/.memory-bank/*.md`, finds nothing, and reports every file as
+   * missing. A relative path is worse: it resolves against the Host process
+   * directory, which is unrelated to the session.
+   *
+   * So: a relative path is refused with the session workspace named, and a path
+   * that names the bank directory is understood to mean its parent.
+   *
+   * @param {unknown} requested - the raw `workspace` argument.
+   * @param {string | undefined} sessionWorkspace - the owning session's cwd.
+   * @returns {string} the workspace directory to operate on.
+   */
+  const resolveWorkspace = (requested, sessionWorkspace) => {
+    const candidates = sessionWorkspace === undefined ? '' : ` Omit \`workspace\` to use this session's workspace (${sessionWorkspace}).`;
+    if (typeof requested !== 'string' || requested.trim().length === 0) {
+      if (sessionWorkspace === undefined) {
+        throw new Error(`memory_bank needs a workspace directory: this call has no owning agent session and no explicit \`workspace\` argument.${candidates}`);
+      }
+      return sessionWorkspace;
+    }
+    const trimmed = requested.trim();
+    if (!isAbsolute(trimmed)) {
+      throw new Error(`memory_bank: \`workspace\` must be an absolute path; received ${JSON.stringify(trimmed)}, which would resolve against the Host process directory rather than your project.${candidates}`);
+    }
+    // Pointing at the bank directory means the project that contains it.
+    const folderName = resolved.folder.replace(/[/\\]+$/, '');
+    const lastSegment = basename(trimmed);
+    const same = process.platform === 'win32'
+      ? lastSegment.toLowerCase() === folderName.toLowerCase()
+      : lastSegment === folderName;
+    return same ? dirname(trimmed) : trimmed;
+  };
+
+  /**
    * Execute one `memory_bank` call.
    * @param {object} args - validated tool arguments.
    * @param {object} exec - the tool run context.
@@ -420,12 +459,7 @@ export function apply(ctx, config) {
   const runMemoryBank = async (args, exec) => {
     const action = String(args.action);
     const agent = exec?.agent;
-    const workspace = typeof args.workspace === 'string' && args.workspace.trim().length > 0
-      ? args.workspace.trim()
-      : workspaceOf(agent);
-    if (workspace === undefined) {
-      throw new Error('memory_bank needs a workspace directory: this call has no owning agent session and no explicit `workspace` argument');
-    }
+    const workspace = resolveWorkspace(args.workspace, workspaceOf(agent));
     const store = registry.get(workspace);
     if (store === undefined) {
       throw new Error('memory_bank: the composed `fs` service is not mounted in this profile');
@@ -435,7 +469,9 @@ export function apply(ctx, config) {
       cwd: workspace,
       ...(exec?.signal === undefined ? {} : { signal: exec.signal }),
     };
-    const base = { action, ok: true, folder: resolved.folder, root: store.root };
+    // `workspace` is echoed in every result so a wrong guess is visible in the
+    // transcript instead of surfacing only as a list of missing files.
+    const base = { action, ok: true, folder: resolved.folder, root: store.root, workspace: store.workspace };
     /** @returns {Array<object>} the catalogue rows for `status` and `list`. */
     const rows = (view) => view.entries.map((entry) => ({
       name: entry.name,
@@ -478,7 +514,9 @@ export function apply(ctx, config) {
         const match = requireFile(args.file, 'read');
         const reading = await store.readFile(match.name, scope);
         if (reading === undefined) {
-          throw new Error(`${resolved.folder}/${match.name} does not exist yet; call memory_bank with action "init" or "write" to create it`);
+          // Name the resolved path, so a wrong `workspace` shows up as the
+          // mismatch it is instead of reading as "the file was never created".
+          throw new Error(`${resolved.folder}/${match.name} does not exist in ${store.root}; call memory_bank with action "init" or "write" to create it`);
         }
         const truncated = reading.text.length > READ_LIMIT_CHARS;
         return {

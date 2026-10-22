@@ -1,6 +1,6 @@
 {
   "name": "dsh-memory-bank",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Persistent workspace memory for DeepSeek Harness: keeps a .memory-bank/ in the workspace so a new conversation inherits the tech stack, past decisions and the current task.",
   "type": "module",
   "main": "./index.js",
